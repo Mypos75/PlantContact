@@ -463,33 +463,36 @@ function handleKey(e) {
 // --- VOICE ---
 let recognition = null;
 let isListening = false;
-let ttsEnabled = true;
+let currentAudio = null;
 
 function getLangCode() {
   return lang === 'nl' ? 'nl-NL' : lang === 'de' ? 'de-DE' : 'en-GB';
 }
 
-function getVoice() {
-  const voices = window.speechSynthesis.getVoices();
-  const langCode = getLangCode();
-  // Try to find a natural female voice for the plant
-  const preferred = voices.find(v => v.lang === langCode && v.name.toLowerCase().includes('female'))
-    || voices.find(v => v.lang === langCode && !v.name.toLowerCase().includes('male'))
-    || voices.find(v => v.lang.startsWith(lang))
-    || voices[0];
-  return preferred;
-}
+async function speak(text) {
+  // Stop any currently playing audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
 
-function speak(text) {
-  if (!ttsEnabled) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.voice = getVoice();
-  utt.lang = getLangCode();
-  utt.rate = 0.88;
-  utt.pitch = 1.05;
-  utt.volume = 1;
-  window.speechSynthesis.speak(utt);
+  try {
+    const r = await fetch('/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voiceId: 'D50w2srwVohKTPx9X6Th' })
+    });
+
+    if (!r.ok) return;
+
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.play();
+    currentAudio.onended = () => URL.revokeObjectURL(url);
+  } catch(e) {
+    console.log('TTS fout:', e.message);
+  }
 }
 
 function toggleMic() {
@@ -555,8 +558,6 @@ function stopMic() {
 
 // Init
 renderPlants(PLANTS);
-// Load voices (async in some browsers)
-window.speechSynthesis.onvoiceschanged = () => {};
 </script>
 </body>
 </html>
