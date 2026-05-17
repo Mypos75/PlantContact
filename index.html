@@ -251,6 +251,7 @@ let activePlant = null;
 let history = [];
 let lang = 'nl';
 let filtered = [...PLANTS];
+const apiKey = true;
 
 const L = {
   nl: { search:"Zoek plant...", placeholder:"Stel je vraag aan de plant...", loading:["Ik ruis na...", "De wortels fluisteren...", "Even voelen..."] },
@@ -388,11 +389,6 @@ async function sendMsg() {
   const inp = document.getElementById('user-input');
   const text = inp.value.trim();
   if (!text || !activePlant) return;
-
-  if (!apiKey || !apiKey.startsWith('sk-ant-')) {
-    alert('Vul eerst een geldige Anthropic API sleutel in (begint met sk-ant-)');
-    return;
-  }
 
   inp.value = ''; inp.style.height = 'auto';
   history.push({ role:'user', text });
