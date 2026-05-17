@@ -171,6 +171,25 @@ body {
 }
 #send-btn:hover { background: #4d8e2e; }
 #send-btn:disabled { background: #1e2e16; cursor: not-allowed; color: #3a5030; }
+
+#mic-btn {
+  background: transparent; border: 0.5px solid rgba(255,255,255,0.12);
+  border-radius: 9px; color: #6a8a5a; width: 40px; height: 40px;
+  cursor: pointer; font-size: 18px; display: flex; align-items: center;
+  justify-content: center; transition: all 0.15s; flex-shrink: 0;
+}
+#mic-btn:hover { background: rgba(255,255,255,0.05); color: #a0c080; }
+#mic-btn.listening {
+  background: rgba(180,40,40,0.2); border-color: rgba(220,80,80,0.4);
+  color: #e08080; animation: pulse 1s infinite;
+}
+#mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+#voice-indicator {
+  font-size: 11px; color: #4a6a3a; font-style: italic;
+  padding: 0 4px; min-width: 60px; text-align: center;
+}
 </style>
 </head>
 <body>
@@ -199,6 +218,7 @@ body {
     <div id="empty">Kies een plant links<br>en stel je vraag hieronder</div>
     <div id="messages"></div>
     <div id="input-row">
+      <button id="mic-btn" onclick="toggleMic()" title="Spreek in">🎤</button>
       <textarea id="user-input" rows="1" placeholder="Stel je vraag aan de plant..." onkeydown="handleKey(event)"></textarea>
       <button id="send-btn" onclick="sendMsg()" title="Versturen">&#9658;</button>
     </div>
@@ -423,6 +443,7 @@ async function sendMsg() {
     const reply = data.content?.find(b => b.type === 'text')?.text || '...';
     history.push({ role:'plant', text: reply });
     renderMsgs();
+    speak(reply);
   } catch(e) {
     hideLoading();
     history.push({ role:'plant', text: `Fout: ${e.message}` });
@@ -439,8 +460,103 @@ function handleKey(e) {
   t.style.height = Math.min(t.scrollHeight, 90) + 'px';
 }
 
+// --- VOICE ---
+let recognition = null;
+let isListening = false;
+let ttsEnabled = true;
+
+function getLangCode() {
+  return lang === 'nl' ? 'nl-NL' : lang === 'de' ? 'de-DE' : 'en-GB';
+}
+
+function getVoice() {
+  const voices = window.speechSynthesis.getVoices();
+  const langCode = getLangCode();
+  // Try to find a natural female voice for the plant
+  const preferred = voices.find(v => v.lang === langCode && v.name.toLowerCase().includes('female'))
+    || voices.find(v => v.lang === langCode && !v.name.toLowerCase().includes('male'))
+    || voices.find(v => v.lang.startsWith(lang))
+    || voices[0];
+  return preferred;
+}
+
+function speak(text) {
+  if (!ttsEnabled) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.voice = getVoice();
+  utt.lang = getLangCode();
+  utt.rate = 0.88;
+  utt.pitch = 1.05;
+  utt.volume = 1;
+  window.speechSynthesis.speak(utt);
+}
+
+function toggleMic() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert('Spraakherkenning werkt alleen in Chrome. Gebruik Chrome om te spreken.');
+    return;
+  }
+  if (isListening) {
+    stopMic();
+  } else {
+    startMic();
+  }
+}
+
+function startMic() {
+  if (!activePlant) {
+    alert('Kies eerst een plant uit de lijst.');
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRec();
+  recognition.lang = getLangCode();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => {
+    isListening = true;
+    const btn = document.getElementById('mic-btn');
+    btn.classList.add('listening');
+    btn.textContent = '⏹';
+    document.getElementById('user-input').placeholder = 'Luisteren...';
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+    document.getElementById('user-input').value = transcript;
+    if (e.results[e.results.length - 1].isFinal) {
+      stopMic();
+      setTimeout(() => sendMsg(), 300);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    stopMic();
+    if (e.error !== 'no-speech') {
+      document.getElementById('user-input').placeholder = 'Fout: ' + e.error;
+    }
+  };
+
+  recognition.onend = () => stopMic();
+  recognition.start();
+}
+
+function stopMic() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(e) {} }
+  const btn = document.getElementById('mic-btn');
+  btn.classList.remove('listening');
+  btn.textContent = '🎤';
+  document.getElementById('user-input').placeholder = 'Stel je vraag aan de plant...';
+}
+
 // Init
 renderPlants(PLANTS);
+// Load voices (async in some browsers)
+window.speechSynthesis.onvoiceschanged = () => {};
 </script>
 </body>
 </html>
